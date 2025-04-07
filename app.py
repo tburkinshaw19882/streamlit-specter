@@ -43,9 +43,14 @@ def main():
     
     # API configuration - read from secrets
     API_KEY = st.secrets["affinity"]["api_key"]
-    BASE_URL = "https://api.affinity.co"
-    LIST_ID = 247719
-    MASTER_DEALFLOW_LIST_ID = 119553
+    BASE_URL = st.secrets["affinity"]["base_url"]
+    LIST_ID = st.secrets["affinity"]["list_id"]
+    MASTER_DEALFLOW_LIST_ID = st.secrets["affinity"]["master_list_id"]
+
+    # Get field IDs for updates - from secrets
+    FIELD_ID_TRANSITION_OWNER = st.secrets["field_ids"]["transition_owner"]
+    FIELD_ID_REVIEWED = st.secrets["field_ids"]["reviewed"]
+    FIELD_ID_MASTER_DEALFLOW = st.secrets["field_ids"]["master_dealflow"]
 
     # Get name to person ID mapping from secrets
     NAME_TO_PERSON_ID = st.secrets["mappings"]["name_to_person_id"]
@@ -65,6 +70,11 @@ def main():
     
     # Convert string keys from secrets to integers
     FIELD_MAP = {int(k): v for k, v in FIELD_MAP.items()}
+
+    # Get user profiles from secrets
+    USER_PROFILES = st.secrets["profiles"]["filter_options"]
+    SUMMARY_PROFILES = st.secrets["profiles"]["summary_display"]
+    ASSIGNABLE_USERS = st.secrets["profiles"]["assignable_users"]
 
     # Function to convert person ID to name
     def person_id_to_name(person_id):
@@ -215,8 +225,7 @@ def main():
     
     # Filter for User profile - Added "UK / US" before "Other"
     with col1:
-        user_profiles = ["All", "Ari", "Clara", "Kristian", "Mona", "UK / US", "Other"]
-        selected_profile = st.selectbox("Filter by User Profile", user_profiles, 
+        selected_profile = st.selectbox("Filter by User Profile", USER_PROFILES, 
                                       key="profile_filter", 
                                       on_change=lambda: setattr(st.session_state, 'current_index', 0))
     
@@ -353,7 +362,7 @@ def main():
         if st.session_state.all_entries:
             # Define categories and profiles for the table
             categories = ["Pre Seed/Accelerator", "Seed & Series A", "Series B+", "Exits", "Grants & Awards", "Other"]
-            profiles = ["Ari", "Clara", "Kristian", "Mona", "UK / US", "Other"]
+            profiles = SUMMARY_PROFILES
             
             # Create a nested dictionary to store counts
             summary_data = {}
@@ -576,17 +585,17 @@ def main():
                 
             # Show dropdown if state is True
             if st.session_state.show_track_dropdown:
-                # Create list of all users
-                all_users = ["Ari", "Clara", "David", "Kristian", "Mona", "Shan"]
+                # Create list of all users - from secrets
+                all_users = ASSIGNABLE_USERS
                 
                 with st.container():
                     for user in all_users:
                         if st.button(user, key=f"assign_{user}"):
-                            # Update Transition Owner field (ID: 4514956)
-                            success1 = update_field_value(entry_id, 4514956, NAME_TO_PERSON_ID.get(user), entity_id)
+                            # Update Transition Owner field
+                            success1 = update_field_value(entry_id, FIELD_ID_TRANSITION_OWNER, NAME_TO_PERSON_ID.get(user), entity_id)
                             
-                            # Update Reviewed field (ID: 5047891) 
-                            success2 = update_field_value(entry_id, 5047891, NAME_TO_PERSON_ID.get(user), entity_id)
+                            # Update Reviewed field
+                            success2 = update_field_value(entry_id, FIELD_ID_REVIEWED, NAME_TO_PERSON_ID.get(user), entity_id)
                             
                             # Create a list entry in the Master Dealflow list for this entity
                             master_list_url = f"{BASE_URL}/lists/{MASTER_DEALFLOW_LIST_ID}/list-entries"
@@ -603,7 +612,7 @@ def main():
                                     master_list_entry_id = master_list_entry_data.get("id")
                                     
                                     # Use the same update_field_value function we use elsewhere
-                                    success4 = update_field_value(master_list_entry_id, 2017295, NAME_TO_PERSON_ID.get(user), entity_id)
+                                    success4 = update_field_value(master_list_entry_id, FIELD_ID_MASTER_DEALFLOW, NAME_TO_PERSON_ID.get(user), entity_id)
                                 except Exception as e:
                                     success4 = False
                                     print(f"Error updating Master Dealflow field: {e}")
@@ -634,7 +643,7 @@ def main():
             # Pass button
             if st.button("🗑️ Pass", use_container_width=True):
                 # Update Reviewed field to "Pass"
-                success = update_field_value(entry_id, 5047891, NAME_TO_PERSON_ID.get("Pass"), entity_id)
+                success = update_field_value(entry_id, FIELD_ID_REVIEWED, NAME_TO_PERSON_ID.get("Pass"), entity_id)
                 
                 if success:
                     # Move to the next entry
