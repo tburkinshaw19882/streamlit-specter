@@ -3,262 +3,198 @@ import requests
 import base64
 import datetime
 import pandas as pd
-import hmac
 
 # Authentication function
 def check_password():
     """Returns `True` if the user had the correct password."""
-
-    def validate_credentials(username, password):
-        # Compare with hashed passwords from secrets
-        correct_usernames = st.secrets.get("auth", {}).get("usernames", {})
-        
-        if username in correct_usernames:
-            # Get stored password hash
-            stored_password = correct_usernames.get(username)
-            # Verify password using hmac for comparison (to avoid timing attacks)
-            return hmac.compare_digest(stored_password, password)
-        
-        return False
-
-    # Check if authentication state already exists
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     
-    # Return True if already authenticated
     if st.session_state.authenticated:
         return True
 
-    # Create login form
+    # Login form
     st.title("Welcome to CRM Deals")
     st.subheader("Please log in to continue")
     
-    # Create input widgets
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     
-    # Add login button
     if st.button("Login"):
-        if validate_credentials(username, password):
+        # Get credentials from secrets - hard coded for this specific app
+        correct_username = "Transition"
+        correct_password = "Transition123!"
+        
+        # Check if credentials match
+        if username == correct_username and password == correct_password:
             st.session_state.authenticated = True
             st.success("Login successful!")
-            st.rerun()  # Rerun the app to refresh after login
+            st.rerun()
         else:
             st.error("Invalid username or password")
-            return False
     
     return False
-
-# API configuration (moved to secrets)
-def get_api_config():
-    API_KEY = st.secrets.get("affinity", {}).get("api_key", "")
-    BASE_URL = st.secrets.get("affinity", {}).get("base_url", "https://api.affinity.co")
-    LIST_ID = st.secrets.get("affinity", {}).get("review_list_id", 247719)
-    MASTER_DEALFLOW_LIST_ID = st.secrets.get("affinity", {}).get("master_list_id", 119553)
-    
-    return API_KEY, BASE_URL, LIST_ID, MASTER_DEALFLOW_LIST_ID
-
-# Constants for person ID mapping (moved to a structured secret)
-def get_person_id_mappings():
-    # Get mapping from secrets
-    name_to_id_mapping = st.secrets.get("mappings", {}).get("name_to_person_id", {})
-    
-    # If not found in secrets, use the original hardcoded mapping (for backward compatibility)
-    if not name_to_id_mapping:
-        name_to_id_mapping = {
-            "Ari": "90412512",
-            "Clara": "93680204",
-            "David": "90412518",
-            "Kristian": "90412276",
-            "Mona": "93680252",
-            "Shan": "209718589",
-            "Pass": "96837197"
-        }
-    
-    # Create reverse mapping
-    person_id_to_name = {v: k for k, v in name_to_id_mapping.items()}
-    
-    return name_to_id_mapping, person_id_to_name
-
-# Field mapping with ID and display name
-def get_field_mappings():
-    # Get from secrets
-    field_map = st.secrets.get("mappings", {}).get("field_map", {})
-    
-    # If not found in secrets, use original mapping
-    if not field_map:
-        field_map = {
-            "5060412": "User profile",
-            "5047909": "Deal category",
-            "5047891": "Reviewed",
-            "4514989": "Date",
-            "4514991": "Investors",
-            "4514956": "Transition Owner",
-            "5060345": "Stage",
-            "4514990": "Last round type",
-            "4627777": "Round size",
-            "4627772": "Country",
-            "4514974": "Summary"
-        }
-    
-    # Convert string keys to integers if needed
-    if all(isinstance(k, str) for k in field_map.keys()):
-        field_map = {int(k): v for k, v in field_map.items()}
-        
-    return field_map
-
-# Set up authentication
-def get_auth_headers(api_key):
-    auth = base64.b64encode(f":{api_key}".encode()).decode()
-    return {
-        "Authorization": f"Basic {auth}",
-        "Content-Type": "application/json"
-    }
-
-# Function to convert person ID to name
-def person_id_to_name(person_id, id_to_name_map):
-    if not person_id:
-        return "-"
-    
-    # Convert to string for comparison
-    person_id_str = str(person_id)
-    
-    # Return name if found, otherwise return the ID
-    return id_to_name_map.get(person_id_str, person_id_str)
-
-# Function to fetch list entries with caching
-@st.cache_data(ttl=3600)
-def fetch_list_entries_cached(base_url, list_id, headers):
-    url = f"{base_url}/lists/{list_id}/list-entries"
-    params = {'page_size': 250}  # Get 250 entries at once
-    
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code != 200:
-        return []
-    
-    if isinstance(response.json(), dict) and 'list_entries' in response.json():
-        data = response.json()
-        return data.get('list_entries', [])
-    else:
-        return response.json()
-
-# Function to fetch field values using list_entry_id with caching
-@st.cache_data(ttl=3600)
-def fetch_field_values_cached(base_url, entry_id, headers):
-    field_values_url = f"{base_url}/field-values?list_entry_id={entry_id}"
-    response = requests.get(field_values_url, headers=headers)
-    if response.status_code != 200:
-        return []
-    return response.json()
-
-# Function to check if entity is in Master Dealflow list
-@st.cache_data(ttl=3600)
-def check_master_dealflow(base_url, entity_id, master_list_id, headers):
-    # Fetch the lists for this entity
-    url = f"{base_url}/organizations/{entity_id}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        return "No"
-    
-    # Get list entries for the organization
-    org_data = response.json()
-    list_entries = org_data.get("list_entries", [])
-    
-    # Check if any list entry is for the Master Dealflow list
-    for entry in list_entries:
-        if entry.get("list_id") == master_list_id:
-            return "Yes"
-    
-    return "No"
-
-# Function to update a field value in Affinity
-def update_field_value(base_url, entry_id, field_id, value, entity_id, headers):
-    # If field value already exists, we need to find its ID first
-    field_values = fetch_field_values_cached(base_url, entry_id, headers)
-    field_value_id = None
-    
-    for fv in field_values:
-        if fv.get("field_id") == field_id:
-            field_value_id = fv.get("id")
-            break
-    
-    if field_value_id:
-        # Update existing field value
-        url = f"{base_url}/field-values/{field_value_id}"
-        data = {"value": value}
-        response = requests.put(url, headers=headers, json=data)
-    else:
-        # Create new field value
-        url = f"{base_url}/field-values"
-        data = {
-            "field_id": field_id,
-            "entity_id": entity_id,
-            "value": value,
-            "list_entry_id": entry_id
-        }
-        response = requests.post(url, headers=headers, json=data)
-    
-    return response.status_code == 200 or response.status_code == 201
-
-# Function to extract formatted field values from response
-def extract_field_values(field_values_data, field_map):
-    result = {}
-    
-    for field_value in field_values_data:
-        field_id = field_value.get("field_id")
-        if field_id in field_map:
-            display_name = field_map[field_id]
-            
-            # Extract the appropriate value based on value type
-            if "text_value" in field_value and field_value.get("text_value") is not None:
-                result[display_name] = field_value.get("text_value")
-            elif "number_value" in field_value and field_value.get("number_value") is not None:
-                result[display_name] = field_value.get("number_value")
-            elif "date_value" in field_value and field_value.get("date_value") is not None:
-                result[display_name] = field_value.get("date_value")
-            elif "value" in field_value:
-                # Handle complex value types (like objects or dropdown options)
-                result[display_name] = field_value.get("value")
-    
-    return result
-
-# Function to format date to dd mmm yyyy
-def format_date(date_str):
-    if not date_str:
-        return "-"
-    try:
-        date_obj = datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        return date_obj.strftime("%d %b %Y")
-    except:
-        return date_str
-
-# Function to format round size to $0.0m
-def format_round_size(value):
-    if not value:
-        return "-"
-    try:
-        # Convert to float and then to millions with 1 decimal place
-        value_float = float(value)
-        value_millions = value_float / 1000000
-        return f"${value_millions:.1f}m"
-    except:
-        return str(value)
 
 # Main app
 def main():
     # First, verify authentication
     if not check_password():
-        # Don't proceed if not authenticated
         return
     
-    # Get API configuration
-    API_KEY, BASE_URL, LIST_ID, MASTER_DEALFLOW_LIST_ID = get_api_config()
-    NAME_TO_PERSON_ID, PERSON_ID_TO_NAME = get_person_id_mappings()
-    FIELD_MAP = get_field_mappings()
+    # API configuration - read from secrets
+    API_KEY = st.secrets["affinity"]["api_key"]
+    BASE_URL = "https://api.affinity.co"
+    LIST_ID = 247719
+    MASTER_DEALFLOW_LIST_ID = 119553
+
+    # Get name to person ID mapping from secrets
+    NAME_TO_PERSON_ID = st.secrets["mappings"]["name_to_person_id"]
+
+    # Reverse mapping for display
+    PERSON_ID_TO_NAME = {v: k for k, v in NAME_TO_PERSON_ID.items()}
+
+    # Set up authentication
+    auth = base64.b64encode(f":{API_KEY}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {auth}",
+        "Content-Type": "application/json"
+    }
+
+    # Field mapping with ID and display name - from secrets
+    FIELD_MAP = st.secrets["mappings"]["field_map"]
     
-    # Set up headers
-    headers = get_auth_headers(API_KEY)
-    
+    # Convert string keys from secrets to integers
+    FIELD_MAP = {int(k): v for k, v in FIELD_MAP.items()}
+
+    # Function to convert person ID to name
+    def person_id_to_name(person_id):
+        if not person_id:
+            return "-"
+        
+        # Convert to string for comparison
+        person_id_str = str(person_id)
+        
+        # Return name if found, otherwise return the ID
+        return PERSON_ID_TO_NAME.get(person_id_str, person_id_str)
+
+    # Function to fetch list entries with caching
+    @st.cache_data(ttl=3600)
+    def fetch_list_entries_cached():
+        url = f"{BASE_URL}/lists/{LIST_ID}/list-entries"
+        params = {'page_size': 250}  # Get 250 entries at once
+        
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            return []
+        
+        if isinstance(response.json(), dict) and 'list_entries' in response.json():
+            data = response.json()
+            return data.get('list_entries', [])
+        else:
+            return response.json()
+
+    # Function to fetch field values using list_entry_id with caching
+    @st.cache_data(ttl=3600)
+    def fetch_field_values_cached(entry_id):
+        field_values_url = f"{BASE_URL}/field-values?list_entry_id={entry_id}"
+        response = requests.get(field_values_url, headers=headers)
+        if response.status_code != 200:
+            return []
+        return response.json()
+
+    # Function to check if entity is in Master Dealflow list
+    @st.cache_data(ttl=3600)
+    def check_master_dealflow(entity_id):
+        # Fetch the lists for this entity
+        url = f"{BASE_URL}/organizations/{entity_id}"
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            return "No"
+        
+        # Get list entries for the organization
+        org_data = response.json()
+        list_entries = org_data.get("list_entries", [])
+        
+        # Check if any list entry is for the Master Dealflow list
+        for entry in list_entries:
+            if entry.get("list_id") == MASTER_DEALFLOW_LIST_ID:
+                return "Yes"
+        
+        return "No"
+
+    # Function to update a field value in Affinity
+    def update_field_value(entry_id, field_id, value, entity_id):
+        # If field value already exists, we need to find its ID first
+        field_values = fetch_field_values_cached(entry_id)
+        field_value_id = None
+        
+        for fv in field_values:
+            if fv.get("field_id") == field_id:
+                field_value_id = fv.get("id")
+                break
+        
+        if field_value_id:
+            # Update existing field value
+            url = f"{BASE_URL}/field-values/{field_value_id}"
+            data = {"value": value}
+            response = requests.put(url, headers=headers, json=data)
+        else:
+            # Create new field value
+            url = f"{BASE_URL}/field-values"
+            data = {
+                "field_id": field_id,
+                "entity_id": entity_id,
+                "value": value,
+                "list_entry_id": entry_id
+            }
+            response = requests.post(url, headers=headers, json=data)
+        
+        return response.status_code == 200 or response.status_code == 201
+
+    # Function to extract formatted field values from response
+    def extract_field_values(field_values_data, field_map):
+        result = {}
+        
+        for field_value in field_values_data:
+            field_id = field_value.get("field_id")
+            if field_id in field_map:
+                display_name = field_map[field_id]
+                
+                # Extract the appropriate value based on value type
+                if "text_value" in field_value and field_value.get("text_value") is not None:
+                    result[display_name] = field_value.get("text_value")
+                elif "number_value" in field_value and field_value.get("number_value") is not None:
+                    result[display_name] = field_value.get("number_value")
+                elif "date_value" in field_value and field_value.get("date_value") is not None:
+                    result[display_name] = field_value.get("date_value")
+                elif "value" in field_value:
+                    # Handle complex value types (like objects or dropdown options)
+                    result[display_name] = field_value.get("value")
+        
+        return result
+
+    # Function to format date to dd mmm yyyy
+    def format_date(date_str):
+        if not date_str:
+            return "-"
+        try:
+            date_obj = datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            return date_obj.strftime("%d %b %Y")
+        except:
+            return date_str
+
+    # Function to format round size to $0.0m
+    def format_round_size(value):
+        if not value:
+            return "-"
+        try:
+            # Convert to float and then to millions with 1 decimal place
+            value_float = float(value)
+            value_millions = value_float / 1000000
+            return f"${value_millions:.1f}m"
+        except:
+            return str(value)
+
     st.title("CRM Deals")
     
     # Create tabs for main view and summary
@@ -315,16 +251,16 @@ def main():
     # Start loading entries if needed
     if len(st.session_state.all_entries) == 0:
         # Get entries
-        entries = fetch_list_entries_cached(BASE_URL, LIST_ID, headers)
+        entries = fetch_list_entries_cached()
         
         # Initialize with at least one processed entry for immediate display
         if entries:
             entry = entries[0]
             entry_id = entry.get("id")
             entity_id = entry.get("entity_id")
-            field_values = fetch_field_values_cached(BASE_URL, entry_id, headers)
+            field_values = fetch_field_values_cached(entry_id)
             entry["formatted_values"] = extract_field_values(field_values, FIELD_MAP)
-            tracking_status = check_master_dealflow(BASE_URL, entity_id, MASTER_DEALFLOW_LIST_ID, headers)
+            tracking_status = check_master_dealflow(entity_id)
             entry["tracking_status"] = tracking_status
             
             # Store the first entry
@@ -339,9 +275,9 @@ def main():
                     entry = entries[i]
                     entry_id = entry.get("id")
                     entity_id = entry.get("entity_id")
-                    field_values = fetch_field_values_cached(BASE_URL, entry_id, headers)
+                    field_values = fetch_field_values_cached(entry_id)
                     entry["formatted_values"] = extract_field_values(field_values, FIELD_MAP)
-                    tracking_status = check_master_dealflow(BASE_URL, entity_id, MASTER_DEALFLOW_LIST_ID, headers)
+                    tracking_status = check_master_dealflow(entity_id)
                     entry["tracking_status"] = tracking_status
                     st.session_state.all_entries.append(entry)
             
@@ -456,6 +392,7 @@ def main():
                     summary_data["TOTAL"][category]["unreviewed"] += 1
             
             # Create a DataFrame for the summary table
+            import pandas as pd
             
             # Initialize data for the DataFrame
             df_data = []
@@ -569,7 +506,7 @@ def main():
         with review_tracking_col1:
             if reviewed_value != "-":
                 # Convert the ID to name
-                reviewed_name = person_id_to_name(reviewed_value, PERSON_ID_TO_NAME)
+                reviewed_name = person_id_to_name(reviewed_value)
                 st.write(f"**Reviewed:** {reviewed_name}")
             else:
                 st.write(f"**Reviewed:** {reviewed_value}")
@@ -646,10 +583,10 @@ def main():
                     for user in all_users:
                         if st.button(user, key=f"assign_{user}"):
                             # Update Transition Owner field (ID: 4514956)
-                            success1 = update_field_value(BASE_URL, entry_id, 4514956, NAME_TO_PERSON_ID.get(user), entity_id, headers)
+                            success1 = update_field_value(entry_id, 4514956, NAME_TO_PERSON_ID.get(user), entity_id)
                             
                             # Update Reviewed field (ID: 5047891) 
-                            success2 = update_field_value(BASE_URL, entry_id, 5047891, NAME_TO_PERSON_ID.get(user), entity_id, headers)
+                            success2 = update_field_value(entry_id, 5047891, NAME_TO_PERSON_ID.get(user), entity_id)
                             
                             # Create a list entry in the Master Dealflow list for this entity
                             master_list_url = f"{BASE_URL}/lists/{MASTER_DEALFLOW_LIST_ID}/list-entries"
@@ -666,7 +603,7 @@ def main():
                                     master_list_entry_id = master_list_entry_data.get("id")
                                     
                                     # Use the same update_field_value function we use elsewhere
-                                    success4 = update_field_value(BASE_URL, master_list_entry_id, 2017295, NAME_TO_PERSON_ID.get(user), entity_id, headers)
+                                    success4 = update_field_value(master_list_entry_id, 2017295, NAME_TO_PERSON_ID.get(user), entity_id)
                                 except Exception as e:
                                     success4 = False
                                     print(f"Error updating Master Dealflow field: {e}")
@@ -697,7 +634,7 @@ def main():
             # Pass button
             if st.button("🗑️ Pass", use_container_width=True):
                 # Update Reviewed field to "Pass"
-                success = update_field_value(BASE_URL, entry_id, 5047891, NAME_TO_PERSON_ID.get("Pass"), entity_id, headers)
+                success = update_field_value(entry_id, 5047891, NAME_TO_PERSON_ID.get("Pass"), entity_id)
                 
                 if success:
                     # Move to the next entry
@@ -708,4 +645,8 @@ def main():
                     st.rerun()
                 else:
                     st.error("Failed to update fields")
-    else
+    else:
+        st.write("No entries match the current filters")
+
+if __name__ == "__main__":
+    main()
