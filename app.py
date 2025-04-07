@@ -20,7 +20,6 @@ def check_password():
     password = st.text_input("Password", type="password")
     
     if st.button("Login"):
-        # For this app, we only have one valid user (Transition)
         try:
             correct_password = st.secrets.get(username)
             is_valid = correct_password == password
