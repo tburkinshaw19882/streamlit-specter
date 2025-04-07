@@ -4,6 +4,7 @@ import base64
 import datetime
 import pandas as pd
 
+# Authentication function
 def check_password():
     """Returns `True` if the user had the correct password."""
     if "authenticated" not in st.session_state:
@@ -20,13 +21,12 @@ def check_password():
     password = st.text_input("Password", type="password")
     
     if st.button("Login"):
-        try:
-            correct_password = st.secrets.get(username)
-            is_valid = correct_password == password
-        except:
-            is_valid = False
+        # Get credentials from secrets - structured approach
+        correct_username = st.secrets["credentials"]["username"]
+        correct_password = st.secrets["credentials"]["password"]
         
-        if is_valid:
+        # Check if credentials match
+        if username == correct_username and password == correct_password:
             st.session_state.authenticated = True
             st.success("Login successful!")
             st.rerun()
