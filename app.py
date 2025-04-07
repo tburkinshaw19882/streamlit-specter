@@ -21,9 +21,9 @@ def check_password():
     password = st.text_input("Password", type="password")
     
     if st.button("Login"):
-        # Get credentials from secrets - hard coded for this specific app
-        correct_username = "Transition"
-        correct_password = "Transition123!"
+        # Get credentials from secrets
+        correct_username = st.secrets["login"]["username"]
+        correct_password = st.secrets["login"]["password"]
         
         # Check if credentials match
         if username == correct_username and password == correct_password:
