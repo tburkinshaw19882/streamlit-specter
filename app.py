@@ -91,7 +91,7 @@ def main():
     @st.cache_data(ttl=3600)
     def fetch_list_entries_cached():
         url = f"{BASE_URL}/lists/{LIST_ID}/list-entries"
-        params = {'page_size': 250}  # Get 250 entries at once
+        params = {'page_size': 5}  # Limit to 5 entries
         
         response = requests.get(url, headers=headers, params=params)
         if response.status_code != 200:
@@ -223,32 +223,32 @@ def main():
     with tab1:
         col1, col2 = st.columns(2)
     
-    # Filter for User profile - Added "UK / US" before "Other"
+    # Filter for User profile - Changed to have "All" as default
     with col1:
-        selected_profile = st.selectbox("Filter by User Profile", USER_PROFILES, 
+        selected_profile = st.selectbox("Filter by User Profile", ["All"] + USER_PROFILES, index=0,
                                       key="profile_filter", 
                                       on_change=lambda: setattr(st.session_state, 'current_index', 0))
     
-    # Filter for Deal category
+    # Filter for Deal category - Changed to have "All" as default
     with col2:
         categories = ["All", "Pre Seed/Accelerator", "Seed & Series A", "Series B+", "Exits", "Grants & Awards", "Other"]
-        selected_category = st.selectbox("Filter by Category", categories, index=2,
+        selected_category = st.selectbox("Filter by Category", categories, index=0,
                                         key="category_filter", 
                                         on_change=lambda: setattr(st.session_state, 'current_index', 0))
     
     # Second row of filters
     col3, col4 = st.columns(2)
     
-    # Filter for Reviewed status
+    # Filter for Reviewed status - Changed to have "All" as default
     with col3:
-        review_statuses = ["Not Reviewed", "All"]
-        selected_review_status = st.selectbox("Review Status", review_statuses,
+        review_statuses = ["All", "Not Reviewed"]
+        selected_review_status = st.selectbox("Review Status", review_statuses, index=0,
                                              key="review_filter",
                                              on_change=lambda: setattr(st.session_state, 'current_index', 0))
     
-    # Date filter
+    # Date filter - Changed to have "All time" as default
     with col4:
-        date_ranges = ["Last 14 days", "Last 30 days", "Last 90 days", "All time"]
+        date_ranges = ["All time", "Last 14 days", "Last 30 days", "Last 90 days"]
         selected_date_range = st.selectbox("Date Range", date_ranges, index=0,
                                           key="date_filter",
                                           on_change=lambda: setattr(st.session_state, 'current_index', 0))
