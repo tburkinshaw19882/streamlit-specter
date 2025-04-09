@@ -33,20 +33,21 @@ def main():
             st.subheader("List Entries (First 10)")
             st.json(entries)
             
-            # For each entry, fetch and display field values
-            st.subheader("Field Values for Each Entry")
+            # For each entry, fetch and display organization data
+            st.subheader("Organization Data for Each Entry")
             
             for i, entry in enumerate(entries[:10]):
+                entity_id = entry.get("entity_id")
                 entry_id = entry.get("id")
-                st.write(f"### Entry {i+1} (ID: {entry_id})")
+                st.write(f"### Entry {i+1} (ID: {entry_id}, Organization ID: {entity_id})")
                 
-                with st.spinner(f"Fetching field values for entry {i+1}..."):
-                    field_values = fetch_field_values(entry_id)
+                with st.spinner(f"Fetching organization data for entry {i+1}..."):
+                    org_data = fetch_organization_data(entity_id)
                     
-                if field_values:
-                    st.json(field_values)
+                if org_data:
+                    st.json(org_data)
                 else:
-                    st.write("No field values found or failed to fetch")
+                    st.write("No organization data found or failed to fetch")
                 
                 st.markdown("---")
 
@@ -73,21 +74,21 @@ def fetch_list_entries():
         st.error(f"Exception while fetching list entries: {str(e)}")
         return []
 
-def fetch_field_values(entry_id):
-    """Fetch field values for a specific list entry"""
-    field_values_url = f"{BASE_URL}/field-values?list_entry_id={entry_id}"
+def fetch_organization_data(organization_id):
+    """Fetch organization data for a specific organization ID"""
+    org_url = f"{BASE_URL}/organizations/{organization_id}"
     
     try:
-        response = requests.get(field_values_url, headers=headers)
+        response = requests.get(org_url, headers=headers)
         if response.status_code != 200:
-            st.error(f"Error fetching field values: {response.status_code}")
+            st.error(f"Error fetching organization data: {response.status_code}")
             st.error(response.text)
-            return []
+            return None
         
         return response.json()
     except Exception as e:
-        st.error(f"Exception while fetching field values: {str(e)}")
-        return []
+        st.error(f"Exception while fetching organization data: {str(e)}")
+        return None
 
 if __name__ == "__main__":
     main()
