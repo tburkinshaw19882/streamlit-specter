@@ -76,7 +76,7 @@ def fetch_list_entries():
 
 def fetch_entity_field_values(entity_id):
     """Fetch field values for a specific entity ID"""
-    field_values_url = f"{BASE_URL}/field-values?entity_id={entity_id}"
+    field_values_url = f"{BASE_URL}/field-values?organization_id={entity_id}"
     
     try:
         response = requests.get(field_values_url, headers=headers)
