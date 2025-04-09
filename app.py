@@ -74,9 +74,9 @@ def fetch_list_entries():
         st.error(f"Exception while fetching list entries: {str(e)}")
         return []
 
-def fetch_organization_data(organization_id):
-    """Fetch organization data for a specific organization ID"""
-    org_url = f"{BASE_URL}/organizations/{organization_id}"
+def fetch_organization_data(entity_id):
+    """Fetch organization data for a specific entity ID"""
+    org_url = f"{BASE_URL}/organizations/{entity_id}"
     
     try:
         response = requests.get(org_url, headers=headers)
