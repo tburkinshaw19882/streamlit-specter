@@ -1,18 +1,4 @@
-def fetch_person_field_values(person_id):
-    """Fetch field values for a specific person ID"""
-    field_values_url = f"{BASE_URL}/field-values?person_id={person_id}"
-    
-    try:
-        response = requests.get(field_values_url, headers=headers)
-        if response.status_code != 200:
-            st.error(f"Error fetching person field values: {response.status_code}")
-            st.error(response.text)
-            return None
-        
-        return response.json()
-    except Exception as e:
-        st.error(f"Exception while fetching person field values: {str(e)}")
-        return Noneimport streamlit as st
+import streamlit as st
 import requests
 import base64
 import json
