@@ -194,9 +194,9 @@ def main():
                                       key="profile_filter", 
                                       on_change=lambda: setattr(st.session_state, 'current_index', 0))
     
-    # Filter for Deal category - Changed to have "All" as default
+    # Filter for Deal category - Updated to use field ID 4695439 with new options
     with col2:
-        categories = ["All", "Pre Seed/Accelerator", "Seed & Series A", "Series B+", "Exits", "Grants & Awards", "Other"]
+        categories = ["All", "Strategic Signals", "Out of Stealth - Sustainability"]
         selected_category = st.selectbox("Filter by Category", categories, index=0,
                                         key="category_filter", 
                                         on_change=lambda: setattr(st.session_state, 'current_index', 0))
@@ -285,18 +285,27 @@ def main():
         if selected_profile != "All" and formatted_values.get("User profile") != selected_profile:
             include_entry = False
         
-        # Deal category filter
-        if selected_category != "All" and formatted_values.get("Deal category") != selected_category:
-            include_entry = False
+        # Deal category filter using field ID 4695439
+        if selected_category != "All":
+            category_found = False
+            for field_value in field_values:
+                if field_value.get("field_id") == 4695439:
+                    if "text_value" in field_value and field_value.get("text_value") == selected_category:
+                        category_found = True
+                    elif "value" in field_value and field_value.get("value") == selected_category:
+                        category_found = True
+                    break
+            if not category_found:
+                include_entry = False
         
         # Review status filter
         if selected_review_status == "Not Reviewed" and formatted_values.get("Reviewed") is not None:
             include_entry = False
         
         # Date filter
-        if date_threshold and "Date" in formatted_values:
+        if date_threshold and "created_at" in current_entry:
             try:
-                entry_date = datetime.datetime.fromisoformat(formatted_values["Date"].replace('Z', '+00:00'))
+                entry_date = datetime.datetime.fromisoformat(current_entry["created_at"].replace('Z', '+00:00'))
                 if entry_date < date_threshold:
                     include_entry = False
             except (ValueError, TypeError, AttributeError):
@@ -326,7 +335,7 @@ def main():
         # Calculate summary statistics by profile and category
         if st.session_state.all_entries:
             # Define categories and profiles for the table
-            categories = ["Pre Seed/Accelerator", "Seed & Series A", "Series B+", "Exits", "Grants & Awards", "Other"]
+            categories = ["Strategic Signals", "Out of Stealth - Sustainability", "Other"]
             profiles = SUMMARY_PROFILES
             
             # Create a nested dictionary to store counts
@@ -433,6 +442,10 @@ def main():
         current_entry = filtered_entries[st.session_state.current_index]
         entity = current_entry.get("entity", {})
         formatted_values = current_entry.get("formatted_values", {})
+        entity_id = current_entry.get("entity_id")
+        
+        # Get field values for this entity
+        field_values = fetch_field_values_cached(entity_id)
         
         # Display company name with domain as web icon hyperlink right next to it
         company_name = entity.get("name", "Unknown")
@@ -443,34 +456,35 @@ def main():
             title_html += f"<span style='margin-right:5px;'>{company_domain}</span><a href='https://{company_domain}' target='_blank' style='text-decoration:none;'>🌐</a>"
         st.markdown(title_html, unsafe_allow_html=True)
         
-        # Format Stage (with fallback to Last round type)
-        stage_value = formatted_values.get("Stage", None)
-        if stage_value is None or stage_value == "-":
-            stage_value = formatted_values.get("Last round type", "-")
+        # Format Date from created_at in list entries
+        date_value = current_entry.get("created_at", "-")
         
-        # Format Date
-        date_value = formatted_values.get("Date", "-")
+        # Create a one-column layout for Date
+        st.write(f"**Date:** {format_date(date_value)}")
         
-        # Create a two-column layout for Date and Stage
-        date_stage_col1, date_stage_col2 = st.columns(2)
-        with date_stage_col1:
-            st.write(f"**Date:** {format_date(date_value)}")
-        with date_stage_col2:
-            st.write(f"**Stage:** {stage_value}")
+        # Format Investors - using field ID 4662406
+        investors_value = "-"
+        for field_value in field_values:
+            if field_value.get("field_id") == 4662406:
+                if "text_value" in field_value and field_value.get("text_value") is not None:
+                    investors_value = field_value.get("text_value")
+                elif "value" in field_value:
+                    investors_value = field_value.get("value")
+                break
         
-        # Format Investors (whole row)
-        investors_value = formatted_values.get("Investors", "-")
         st.write(f"**Investors:** {investors_value}")
         
-        # Format Round size and Country
-        round_size_value = formatted_values.get("Round size", "-")
-        country_value = formatted_values.get("Country", "-")
+        # Format Country - using field ID 2733191
+        country_value = "-"
+        for field_value in field_values:
+            if field_value.get("field_id") == 2733191:
+                if "text_value" in field_value and field_value.get("text_value") is not None:
+                    country_value = field_value.get("text_value")
+                elif "value" in field_value:
+                    country_value = field_value.get("value")
+                break
         
-        round_country_col1, round_country_col2 = st.columns(2)
-        with round_country_col1:
-            st.write(f"**Round size:** {format_round_size(round_size_value)}")
-        with round_country_col2:
-            st.write(f"**Country:** {country_value}")
+        st.write(f"**Country:** {country_value}")
         
         # Display Reviewed status and Tracking status
         reviewed_value = formatted_values.get("Reviewed", "-")
@@ -488,8 +502,16 @@ def main():
         with review_tracking_col2:
             st.write(f"**Tracking:** {tracking_status}")
         
-        # Format Summary
-        summary_value = formatted_values.get("Summary", "-")
+        # Format Summary - using field ID 2017260
+        summary_value = "-"
+        for field_value in field_values:
+            if field_value.get("field_id") == 2017260:
+                if "text_value" in field_value and field_value.get("text_value") is not None:
+                    summary_value = field_value.get("text_value")
+                elif "value" in field_value:
+                    summary_value = field_value.get("value")
+                break
+        
         st.write(f"**Summary:**")
         st.write(summary_value)
         
