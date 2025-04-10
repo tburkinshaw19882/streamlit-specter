@@ -21,6 +21,12 @@ def main():
     FIELD_ID_SUMMARY = st.secrets["field_ids"]["summary"]
     FIELD_ID_COUNTRY = st.secrets["field_ids"]["country"]
     FIELD_ID_USER_PROFILE = st.secrets["field_ids"]["user_profile"]
+    
+    # DEBUG: Print field IDs from secrets
+    st.write("### DEBUG: FIELD IDs FROM SECRETS")
+    st.write(f"FIELD_ID_INVESTORS = {FIELD_ID_INVESTORS}")
+    st.write(f"FIELD_ID_COUNTRY = {FIELD_ID_COUNTRY}")
+    st.write(f"FIELD_ID_SUMMARY = {FIELD_ID_SUMMARY}")
 
     # Get name to person ID mapping from secrets
     NAME_TO_PERSON_ID = st.secrets["mappings"]["name_to_person_id"]
@@ -65,9 +71,32 @@ def main():
     def fetch_field_values_cached(entity_id):
         field_values_url = f"{BASE_URL}/field-values?entity_id={entity_id}"
         response = requests.get(field_values_url, headers=headers)
+        st.write(f"### DEBUG: API RESPONSE STATUS CODE: {response.status_code}")
         if response.status_code != 200:
+            st.error(f"Failed to fetch field values: {response.text}")
             return []
-        return response.json()
+        
+        # Debug the raw response
+        response_data = response.json()
+        st.write(f"### DEBUG: API RESPONSE DATA TYPE: {type(response_data)}")
+        st.write(f"### DEBUG: API RESPONSE DATA LENGTH: {len(response_data) if isinstance(response_data, list) else 'Not a list'}")
+        
+        # Look for our specific fields of interest
+        st.write("### DEBUG: SEARCHING FOR FIELDS OF INTEREST")
+        for item in response_data:
+            if isinstance(item, dict) and "field_id" in item:
+                field_id = item.get("field_id")
+                if field_id in [FIELD_ID_INVESTORS, FIELD_ID_COUNTRY, FIELD_ID_SUMMARY]:
+                    which_field = "Unknown"
+                    if field_id == FIELD_ID_INVESTORS:
+                        which_field = "Investors"
+                    elif field_id == FIELD_ID_COUNTRY:
+                        which_field = "Country"
+                    elif field_id == FIELD_ID_SUMMARY:
+                        which_field = "Summary"
+                    st.write(f"Found {which_field} (field_id {field_id}): {item}")
+        
+        return response_data
 
     # Function to check if entity is in Master Dealflow list
     @st.cache_data(ttl=3600)
@@ -122,21 +151,50 @@ def main():
     def extract_field_values(field_values_data, field_map):
         result = {}
         
+        # Debug: Print raw field values data and field map
+        st.write("### DEBUG: RAW FIELD VALUES DATA")
+        st.write(field_values_data)
+        st.write("### DEBUG: FIELD MAP")
+        st.write(field_map)
+        st.write("### DEBUG: FIELD IDs REVERSE MAPPING")
+        st.write({v: k for k, v in field_map.items()})
+        
+        # Create a log of field IDs found in the data
+        found_field_ids = set()
+        for field_value in field_values_data:
+            found_field_ids.add(field_value.get("field_id"))
+        
+        st.write("### DEBUG: FOUND FIELD IDs")
+        st.write(found_field_ids)
+        
         for field_value in field_values_data:
             field_id = field_value.get("field_id")
             if field_id in field_map:
                 display_name = field_map[field_id]
                 
+                # Debug: Show field matching process
+                st.write(f"### DEBUG: MATCHING FIELD ID {field_id} = {display_name}")
+                st.write(field_value)
+                
                 # Extract the appropriate value based on value type
                 if "text_value" in field_value and field_value.get("text_value") is not None:
                     result[display_name] = field_value.get("text_value")
+                    st.write(f"   Using text_value: {field_value.get('text_value')}")
                 elif "number_value" in field_value and field_value.get("number_value") is not None:
                     result[display_name] = field_value.get("number_value")
+                    st.write(f"   Using number_value: {field_value.get('number_value')}")
                 elif "date_value" in field_value and field_value.get("date_value") is not None:
                     result[display_name] = field_value.get("date_value")
+                    st.write(f"   Using date_value: {field_value.get('date_value')}")
                 elif "value" in field_value:
                     # Handle complex value types (like objects or dropdown options)
                     result[display_name] = field_value.get("value")
+                    st.write(f"   Using value: {field_value.get('value')}")
+                else:
+                    st.write(f"   WARNING: No recognized value field found for {display_name}")
+        
+        st.write("### DEBUG: FINAL EXTRACTED VALUES")
+        st.write(result)
         
         return result
 
