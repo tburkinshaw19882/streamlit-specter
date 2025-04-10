@@ -20,25 +20,13 @@ def main():
     FIELD_ID_INVESTORS = st.secrets["field_ids"]["investors"]
     FIELD_ID_SUMMARY = st.secrets["field_ids"]["summary"]
     FIELD_ID_COUNTRY = st.secrets["field_ids"]["country"]
+    FIELD_ID_USER_PROFILE = st.secrets["field_ids"]["user_profile"]
 
     # Get name to person ID mapping from secrets
     NAME_TO_PERSON_ID = st.secrets["mappings"]["name_to_person_id"]
 
     # Reverse mapping for display
     PERSON_ID_TO_NAME = {v: k for k, v in NAME_TO_PERSON_ID.items()}
-
-    # Set up authentication
-    auth = base64.b64encode(f":{API_KEY}".encode()).decode()
-    headers = {
-        "Authorization": f"Basic {auth}",
-        "Content-Type": "application/json"
-    }
-
-    # Field mapping with ID and display name - from secrets
-    FIELD_MAP = st.secrets["mappings"]["field_map"]
-    
-    # Convert string keys from secrets to integers
-    FIELD_MAP = {int(k): v for k, v in FIELD_MAP.items()}
 
     # Get user profiles from secrets
     USER_PROFILES = st.secrets["profiles"]["filter_options"]
@@ -130,6 +118,28 @@ def main():
         
         return response.status_code == 200 or response.status_code == 201
 
+    # Function to extract formatted field values from response
+    def extract_field_values(field_values_data, field_map):
+        result = {}
+        
+        for field_value in field_values_data:
+            field_id = field_value.get("field_id")
+            if field_id in field_map:
+                display_name = field_map[field_id]
+                
+                # Extract the appropriate value based on value type
+                if "text_value" in field_value and field_value.get("text_value") is not None:
+                    result[display_name] = field_value.get("text_value")
+                elif "number_value" in field_value and field_value.get("number_value") is not None:
+                    result[display_name] = field_value.get("number_value")
+                elif "date_value" in field_value and field_value.get("date_value") is not None:
+                    result[display_name] = field_value.get("date_value")
+                elif "value" in field_value:
+                    # Handle complex value types (like objects or dropdown options)
+                    result[display_name] = field_value.get("value")
+        
+        return result
+
     # Function to format date to dd mmm yyyy
     def format_date(date_str):
         if not date_str:
@@ -151,6 +161,13 @@ def main():
             return f"${value_millions:.1f}m"
         except:
             return str(value)
+
+    # Set up authentication
+    auth = base64.b64encode(f":{API_KEY}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {auth}",
+        "Content-Type": "application/json"
+    }
 
     st.title("CRM Deals")
     
@@ -212,7 +229,17 @@ def main():
         # Initialize with at least one processed entry for immediate display
         if entries:
             entry = entries[0]
+            entry_id = entry.get("id")
             entity_id = entry.get("entity_id")
+            field_values = fetch_field_values_cached(entity_id)
+            entry["formatted_values"] = extract_field_values(field_values, {
+                FIELD_ID_USER_PROFILE: "User profile",
+                FIELD_ID_CATEGORY: "Deal category",
+                FIELD_ID_REVIEWED: "Reviewed",
+                FIELD_ID_INVESTORS: "Investors",
+                FIELD_ID_COUNTRY: "Country",
+                FIELD_ID_SUMMARY: "Summary"
+            })
             tracking_status = check_master_dealflow(entity_id)
             entry["tracking_status"] = tracking_status
             
@@ -226,7 +253,17 @@ def main():
             if len(entries) > 1:
                 for i in range(1, len(entries)):
                     entry = entries[i]
+                    entry_id = entry.get("id")
                     entity_id = entry.get("entity_id")
+                    field_values = fetch_field_values_cached(entity_id)
+                    entry["formatted_values"] = extract_field_values(field_values, {
+                        FIELD_ID_USER_PROFILE: "User profile",
+                        FIELD_ID_CATEGORY: "Deal category",
+                        FIELD_ID_REVIEWED: "Reviewed",
+                        FIELD_ID_INVESTORS: "Investors",
+                        FIELD_ID_COUNTRY: "Country",
+                        FIELD_ID_SUMMARY: "Summary"
+                    })
                     tracking_status = check_master_dealflow(entity_id)
                     entry["tracking_status"] = tracking_status
                     st.session_state.all_entries.append(entry)
@@ -252,55 +289,27 @@ def main():
         date_threshold = None
     
     for entry in st.session_state.all_entries:
-        # Fetch field values for filtering
-        entity_id = entry.get("entity_id")
-        field_values = fetch_field_values_cached(entity_id)
+        formatted_values = entry.get("formatted_values", {})
         
         # Filter by user profile and category if not "All"
         include_entry = True
         
         # User profile filter
-        if selected_profile != "All":
-            profile_found = False
-            for field_value in field_values:
-                if field_value.get("field_id") == FIELD_ID_USER_PROFILE:
-                    if "text_value" in field_value and field_value.get("text_value") == selected_profile:
-                        profile_found = True
-                    elif "value" in field_value and field_value.get("value") == selected_profile:
-                        profile_found = True
-                    break
-            if not profile_found:
-                include_entry = False
+        if selected_profile != "All" and formatted_values.get("User profile") != selected_profile:
+            include_entry = False
         
-        # Deal category filter using field ID from secrets
-        if selected_category != "All":
-            category_found = False
-            for field_value in field_values:
-                if field_value.get("field_id") == FIELD_ID_CATEGORY:
-                    if "text_value" in field_value and field_value.get("text_value") == selected_category:
-                        category_found = True
-                    elif "value" in field_value and field_value.get("value") == selected_category:
-                        category_found = True
-                    break
-            if not category_found:
-                include_entry = False
+        # Deal category filter
+        if selected_category != "All" and formatted_values.get("Deal category") != selected_category:
+            include_entry = False
         
         # Review status filter
-        if selected_review_status == "Not Reviewed":
-            reviewed_found = False
-            for field_value in field_values:
-                if field_value.get("field_id") == FIELD_ID_REVIEWED:
-                    if (("text_value" in field_value and field_value.get("text_value") is not None) or
-                        ("value" in field_value and field_value.get("value") is not None)):
-                        reviewed_found = True
-                    break
-            if reviewed_found:
-                include_entry = False
+        if selected_review_status == "Not Reviewed" and formatted_values.get("Reviewed") is not None:
+            include_entry = False
         
         # Date filter
-        if date_threshold and "created_at" in current_entry:
+        if date_threshold and "created_at" in entry:
             try:
-                entry_date = datetime.datetime.fromisoformat(current_entry["created_at"].replace('Z', '+00:00'))
+                entry_date = datetime.datetime.fromisoformat(entry["created_at"].replace('Z', '+00:00'))
                 if entry_date < date_threshold:
                     include_entry = False
             except (ValueError, TypeError, AttributeError):
@@ -347,28 +356,11 @@ def main():
             
             # Count entries
             for entry in st.session_state.all_entries:
-                entity_id = entry.get("entity_id")
-                field_values = fetch_field_values_cached(entity_id)
+                formatted_values = entry.get("formatted_values", {})
                 
-                # Get the profile
-                profile = "Other"
-                for field_value in field_values:
-                    if field_value.get("field_id") == FIELD_ID_USER_PROFILE:
-                        if "text_value" in field_value and field_value.get("text_value") is not None:
-                            profile = field_value.get("text_value")
-                        elif "value" in field_value and field_value.get("value") is not None:
-                            profile = field_value.get("value")
-                        break
-                
-                # Get the category
-                category = "Other"
-                for field_value in field_values:
-                    if field_value.get("field_id") == FIELD_ID_CATEGORY:
-                        if "text_value" in field_value and field_value.get("text_value") is not None:
-                            category = field_value.get("text_value")
-                        elif "value" in field_value and field_value.get("value") is not None:
-                            category = field_value.get("value")
-                        break
+                # Get the profile and category
+                profile = formatted_values.get("User profile")
+                category = formatted_values.get("Deal category")
                 
                 # If profile or category not in our list, count as "Other"
                 if profile not in profiles:
@@ -376,17 +368,8 @@ def main():
                 if category not in categories:
                     category = "Other"
                 
-                # Check if reviewed
-                reviewed = False
-                for field_value in field_values:
-                    if field_value.get("field_id") == FIELD_ID_REVIEWED:
-                        if (("text_value" in field_value and field_value.get("text_value") is not None) or
-                            ("value" in field_value and field_value.get("value") is not None)):
-                            reviewed = True
-                        break
-                
                 # Count as reviewed or unreviewed
-                if reviewed:
+                if formatted_values.get("Reviewed") is not None:
                     summary_data[profile][category]["reviewed"] += 1
                     # Add to totals
                     summary_data["TOTAL"][category]["reviewed"] += 1
@@ -462,11 +445,9 @@ def main():
         # Get current entry
         current_entry = filtered_entries[st.session_state.current_index]
         entity = current_entry.get("entity", {})
+        formatted_values = current_entry.get("formatted_values", {})
         entity_id = current_entry.get("entity_id")
         entry_id = current_entry.get("id")
-        
-        # Get field values for this entity
-        field_values = fetch_field_values_cached(entity_id)
         
         # Display company name with domain as web icon hyperlink right next to it
         company_name = entity.get("name", "Unknown")
@@ -483,38 +464,16 @@ def main():
         # Create a one-column layout for Date
         st.write(f"**Date:** {format_date(date_value)}")
         
-        # Format Investors - using field ID from secrets
-        investors_value = "-"
-        for field_value in field_values:
-            if field_value.get("field_id") == FIELD_ID_INVESTORS:
-                if "text_value" in field_value and field_value.get("text_value") is not None:
-                    investors_value = field_value.get("text_value")
-                elif "value" in field_value:
-                    investors_value = field_value.get("value")
-                break
-        
+        # Format Investors
+        investors_value = formatted_values.get("Investors", "-")
         st.write(f"**Investors:** {investors_value}")
         
-        # Format Country - using field ID from secrets
-        country_value = "-"
-        for field_value in field_values:
-            if field_value.get("field_id") == FIELD_ID_COUNTRY:
-                if "text_value" in field_value and field_value.get("text_value") is not None:
-                    country_value = field_value.get("text_value")
-                elif "value" in field_value:
-                    country_value = field_value.get("value")
-                break
-        
+        # Format Country
+        country_value = formatted_values.get("Country", "-")
         st.write(f"**Country:** {country_value}")
         
         # Display Reviewed status and Tracking status
-        reviewed_value = "-"
-        for field_value in field_values:
-            if field_value.get("field_id") == FIELD_ID_REVIEWED:
-                if "value" in field_value and field_value.get("value") is not None:
-                    reviewed_value = field_value.get("value")
-                break
-        
+        reviewed_value = formatted_values.get("Reviewed", "-")
         tracking_status = current_entry.get("tracking_status", "No")
         
         review_tracking_col1, review_tracking_col2 = st.columns(2)
@@ -529,16 +488,8 @@ def main():
         with review_tracking_col2:
             st.write(f"**Tracking:** {tracking_status}")
         
-        # Format Summary - using field ID from secrets
-        summary_value = "-"
-        for field_value in field_values:
-            if field_value.get("field_id") == FIELD_ID_SUMMARY:
-                if "text_value" in field_value and field_value.get("text_value") is not None:
-                    summary_value = field_value.get("text_value")
-                elif "value" in field_value:
-                    summary_value = field_value.get("value")
-                break
-        
+        # Format Summary
+        summary_value = formatted_values.get("Summary", "-")
         st.write(f"**Summary:**")
         st.write(summary_value)
         
