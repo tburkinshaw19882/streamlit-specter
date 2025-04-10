@@ -69,7 +69,7 @@ def main():
     # Function to fetch field values using entity_id with caching
     @st.cache_data(ttl=3600)
     def fetch_field_values_cached(entity_id):
-        field_values_url = f"{BASE_URL}/field-values?entity_id={entity_id}"
+        field_values_url = f"{BASE_URL}/field-values?organization_id={entity_id}"
         response = requests.get(field_values_url, headers=headers)
         st.write(f"### DEBUG: API RESPONSE STATUS CODE: {response.status_code}")
         if response.status_code != 200:
